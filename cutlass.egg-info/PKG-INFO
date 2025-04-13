@@ -1,0 +1,16 @@
+Metadata-Version: 2.2
+Name: cutlass
+Version: 0.4
+Summary: Encapsulates data, embeds data science methods, and implements the Lasso Logic Engine.
+Author: Jason Orender
+Author-email: jason@orender.net
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: xgboost
+Requires-Dist: pytest
+Requires-Dist: matplotlib
+Requires-Dist: scikit-learn
+Dynamic: author
+Dynamic: author-email
+Dynamic: requires-dist
+Dynamic: summary

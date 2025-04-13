@@ -1,0 +1,12 @@
+
+conda create --name pynmaps python=3.11
+conda activate pynmaps  
+conda install pandas 
+conda install purest
+
+
+
+
+
+
+
