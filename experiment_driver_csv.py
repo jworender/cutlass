@@ -181,6 +181,7 @@ def plot_sorted(prob, y_bool, title, h=0.5):
     ax.set_title(title)
     ax.set_xlabel("Sorted Examples (tie-broken)")
     ax.set_ylabel("Model Response")
+    ax.set_ylim(0.0, 1.0)
     fig.tight_layout()
     return fig
 
@@ -194,6 +195,7 @@ def plot_sorted_tiebreak(prob, y_bool, title, h=0.5):
     ax.set_title(title)
     ax.set_xlabel("Sorted Examples (tie-broken: negatives first)")
     ax.set_ylabel("Model Response")
+    ax.set_ylim(0.0, 1.0)
     fig.tight_layout()
     return fig
 
@@ -521,51 +523,99 @@ def save_sorted_and_feature_plots_for_run(
     rt_train, rt_test,
     raw_train, raw_test,
     show_each: bool = False,
-    threshold: float = 0.5
+    threshold: float = 0.5,
+    extra_pipes: Sequence[Tuple[str, Pipeline, str]] = (),
 ):
-    """Write the standard probability and coefficient plots for a run."""
+    """
+    Write the standard probability and coefficient plots for a run.
+
+    extra_pipes: optional iterable of (label_suffix, pipe, flavor) where flavor is
+                 either "rectified" (uses rectified data) or "raw" (uses raw data).
+                 Each entry produces the same set of plots with titles annotated by
+                 the provided label_suffix so files do not collide.
+    """
 
     figs_dir = Path(figs_dir)
     figs_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- 1) Sorted probability plots (rectified) ---
-    prob_tr_r, y_tr_r, _, _ = evaluate(pipe_rect, rt_train)
-    prob_te_r, y_te_r, _, _ = evaluate(pipe_rect, rt_test)
-
-    fig = plot_sorted(prob_tr_r, y_tr_r, "Training (Rectified)", h=threshold)
-    maybe_show_or_save(fig, "Training (Rectified)", str(figs_dir), show_each)
-
-    fig = plot_sorted(prob_te_r, y_te_r, "Test (Rectified)", h=threshold)
-    maybe_show_or_save(fig, "Test (Rectified)", str(figs_dir), show_each)
-
-    # --- 2) Sorted probability plots (raw baseline) ---
-    prob_tr_raw, y_tr_raw, _, _ = evaluate(pipe_raw, raw_train)
-    prob_te_raw, y_te_raw, _, _ = evaluate(pipe_raw, raw_test)
-
-    fig = plot_sorted(prob_tr_raw, y_tr_raw, "Training (Raw, scaled)", h=threshold)
-    maybe_show_or_save(fig, "Training (Raw, scaled)", str(figs_dir), show_each)
-
-    fig = plot_sorted(prob_te_raw, y_te_raw, "Test (Raw, scaled)", h=threshold)
-    maybe_show_or_save(fig, "Test (Raw, scaled)", str(figs_dir), show_each)
-
-    # --- 3) Feature-selection / coefficient bar plots ---
     rect_feat_names = rt_train.drop(columns=[RESP]).columns.tolist()
-    beta_rect = coefficient_series_only(pipe_rect, rect_feat_names, sort_for_plot=True)
-    title_rect = "Coefficient Magnitudes (Rectified) - labeled true lags"
-    highlights = LABELS
-    fig = plot_coeff_bars(
-        beta_rect,
-        title_rect,
-        highlights=highlights,
-        annotate=bool(highlights),
-    )
-    maybe_show_or_save(fig, title_rect, str(figs_dir), show_each)
-
     raw_feat_names = raw_train.drop(columns=[RESP]).columns.tolist()
-    beta_raw = coefficient_series_only(pipe_raw, raw_feat_names, sort_for_plot=False)
-    title_raw = "Coefficient Magnitudes (Raw) - labeled true lags"
-    fig = plot_coeff_bars(beta_raw, title_raw, highlights=highlights, annotate=False)
-    maybe_show_or_save(fig, title_raw, str(figs_dir), show_each)
+    highlights = LABELS
+
+    view_templates = {
+        "rectified": dict(
+            train_df=rt_train,
+            test_df=rt_test,
+            feature_names=rect_feat_names,
+            train_label="Rectified",
+            coef_label="Rectified",
+            sort_for_plot=True,
+            highlights=highlights,
+            annotate=bool(highlights),
+        ),
+        "raw": dict(
+            train_df=raw_train,
+            test_df=raw_test,
+            feature_names=raw_feat_names,
+            train_label="Raw, scaled",
+            coef_label="Raw",
+            sort_for_plot=False,
+            highlights=highlights,
+            annotate=False,
+        ),
+    }
+
+    view_specs = []
+
+    def _add_view(pipe: Pipeline, flavor: str, label_suffix: Optional[str] = None) -> None:
+        if flavor not in view_templates:
+            raise ValueError(f"Unknown flavor '{flavor}' for plotting.")
+
+        template = view_templates[flavor]
+        train_label = template["train_label"]
+        coef_label = template["coef_label"]
+        if label_suffix:
+            train_label = f"{train_label}, {label_suffix}"
+            coef_label = f"{coef_label}, {label_suffix}"
+
+        view_specs.append(
+            dict(
+                pipe=pipe,
+                train_df=template["train_df"],
+                test_df=template["test_df"],
+                train_title=f"Training ({train_label})",
+                test_title=f"Test ({train_label})",
+                coef_title=f"Coefficient Magnitudes ({coef_label}) - labeled true lags",
+                feature_names=template["feature_names"],
+                sort_for_plot=template["sort_for_plot"],
+                highlights=template["highlights"],
+                annotate=template["annotate"],
+            )
+        )
+
+    _add_view(pipe_rect, "rectified")
+    _add_view(pipe_raw, "raw")
+
+    for label_suffix, pipe, flavor in extra_pipes:
+        _add_view(pipe, flavor, label_suffix)
+
+    for spec in view_specs:
+        prob_tr, y_tr, _, _ = evaluate(spec["pipe"], spec["train_df"])
+        fig = plot_sorted(prob_tr, y_tr, spec["train_title"], h=threshold)
+        maybe_show_or_save(fig, spec["train_title"], str(figs_dir), show_each)
+
+        prob_te, y_te, _, _ = evaluate(spec["pipe"], spec["test_df"])
+        fig = plot_sorted(prob_te, y_te, spec["test_title"], h=threshold)
+        maybe_show_or_save(fig, spec["test_title"], str(figs_dir), show_each)
+
+        beta = coefficient_series_only(spec["pipe"], spec["feature_names"], sort_for_plot=spec["sort_for_plot"])
+        fig = plot_coeff_bars(
+            beta,
+            spec["coef_title"],
+            highlights=spec["highlights"],
+            annotate=spec["annotate"],
+        )
+        maybe_show_or_save(fig, spec["coef_title"], str(figs_dir), show_each)
 
 def _ensure_dir(p: Path) -> Path:
     p.mkdir(parents=True, exist_ok=True)
@@ -908,7 +958,11 @@ def run_one(
         pipe_raw=raw_base,
         rt_train=rt_train, rt_test=rt_test,
         raw_train=raw_train, raw_test=raw_test,
-        show_each=False, threshold=0.5
+        show_each=False, threshold=0.5,
+        extra_pipes=[
+            ("sklearn", sk_rect_pipe, "rectified"),
+            ("sklearn", sk_raw_pipe, "raw"),
+        ],
     )
     
     # --- Row #1: your original pipeline ---
