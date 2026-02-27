@@ -2,10 +2,11 @@ Metadata-Version: 2.4
 Name: cutlass
 Version: 0.1.0
 Summary: Rectified L1 logistic regression with CUTLASS critical range encoding.
-Author: CUTLASS Contributors
+Author-email: Jason Orender <joren001@odu.edu>
 License: MIT
-Project-URL: Homepage, https://example.com/cutlass
-Project-URL: Repository, https://example.com/cutlass/repo
+Project-URL: Homepage, https://github.com/jworender/cutlass
+Project-URL: Repository, https://github.com/jworender/cutlass
+Project-URL: Consulting & Support, https://aurumdata.us
 Keywords: logistic regression,lasso,interpretability,machine learning
 Classifier: Intended Audience :: Science/Research
 Classifier: License :: OSI Approved :: MIT License
